@@ -295,4 +295,175 @@ class SimpleAgent:
 - Configures the runtime environment
 - Defines the command to start your application
 
-**Why we need it:** Cloud Run runs containers, not raw Python code. This file tells Docker h
+**Why we need it:** Cloud Run runs containers, not raw Python code. This file tells Docker how to package your application into a self-contained, runnable unit. Think of it as a recipe for creating a virtual machine that runs your app.
+
+**Key sections:**
+
+```dockerfile
+FROM python:3.11-slim           # Base operating system
+COPY requirements.txt .         # Copy dependency list
+RUN pip install -r requirements.txt  # Install dependencies
+COPY app/ ./app/                # Copy your code
+CMD exec uvicorn app.main:app   # Start the application
+```
+
+---
+
+### `requirements.txt`
+
+**Type:** Text file (Python dependency manifest)  
+**Purpose:** Lists all Python packages your application needs
+
+**What it does:**
+
+- Specifies exact versions of libraries
+- Ensures consistent environments across local/production
+- Used by pip to install dependencies
+
+**Why we need it:** Python projects rely on external libraries. This file ensures:
+
+- Everyone uses the same versions
+- Docker builds are reproducible
+- Dependencies are documented
+
+**Contents:**
+
+```
+fastapi==0.104.1        # Web framework
+uvicorn[standard]==0.24.0  # ASGI server
+pydantic==2.5.0         # Data validation
+httpx==0.25.1           # HTTP client
+anthropic==0.39.0       # Claude API SDK
+```
+
+---
+
+## How It All Works Together
+
+1. **You write code** in `app/main.py` and `app/agent.py`
+2. **You push to GitHub** which triggers `deploy.yml`
+3. **GitHub Actions** reads `Dockerfile` to build a container
+4. **Docker** installs packages from `requirements.txt`
+5. **The container** is pushed to Artifact Registry
+6. **Cloud Run** deploys the container and runs `app/main.py`
+7. **Users** can now call your agent via HTTPS endpoints
+
+---
+
+## Testing Your Agent
+
+### Local Testing
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set API key
+export ANTHROPIC_API_KEY="your-key-here"
+
+# Run locally
+python -m app.main
+
+# Open browser to http://localhost:8080/docs
+```
+
+### Cloud Testing (Authenticated)
+
+```bash
+# Use proxy for secure local access
+gcloud run services proxy agent-mvp --region=YOUR_REGION
+
+# Then access at http://localhost:8080
+
+# Or use curl with authentication
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  -X POST YOUR_SERVICE_URL/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!"}'
+```
+
+---
+
+## Architecture Overview
+
+```
+Developer
+    ↓ (git push)
+GitHub Repository
+    ↓ (triggers)
+GitHub Actions (deploy.yml)
+    ↓ (builds)
+Docker Image
+    ↓ (stores in)
+Artifact Registry
+    ↓ (deploys to)
+Cloud Run
+    ↓ (serves)
+HTTPS Endpoint
+    ↓ (calls)
+Claude API
+```
+
+---
+
+## Cost Considerations
+
+**Free Tier Includes:**
+
+- Cloud Run: 2 million requests/month
+- Artifact Registry: 0.5 GB storage
+- Cloud Build: 120 build-minutes/day
+
+This MVP should stay well within free tier limits for development and testing.
+
+---
+
+## Next Steps
+
+1. **Add more agent capabilities**: Integrate tools, web search, database access
+2. **Implement memory**: Store conversation history with Firestore
+3. **Add authentication**: Implement API keys or OAuth
+4. **Monitoring**: Set up Cloud Logging and alerts
+5. **Scale**: Adjust Cloud Run settings for production traffic
+
+---
+
+## Security Best Practices
+
+- ✅ Service account with minimal required permissions
+- ✅ API keys stored as environment variables (not in code)
+- ✅ Authenticated Cloud Run service by default
+- ✅ HTTPS encryption automatic with Cloud Run
+- ⚠️ Remember to rotate service account keys periodically
+- ⚠️ Monitor API usage and set budget alerts
+
+---
+
+## Troubleshooting
+
+**Deployment fails:**
+
+- Check GitHub Actions logs for specific errors
+- Verify service account has all required roles
+- Ensure APIs are enabled in GCP
+
+**403 Forbidden error:**
+
+- Service requires authentication by default
+- Use `gcloud run services proxy` for secure access
+- Or add IAM policy binding for public access
+
+**Agent returns errors:**
+
+- Verify ANTHROPIC_API_KEY is set correctly
+- Check Cloud Run logs: `gcloud run services logs read agent-mvp --region=YOUR_REGION`
+- Ensure API key has sufficient credits
+
+---
+
+## Resources
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Cloud Run Documentation](https://cloud.google.com/run/docs)
+- [Anthropic API Documentation](https://docs.anthropic.com/)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)

@@ -15,6 +15,8 @@ class AgentResponse(BaseModel):
     response: str
     status: str
 
+my_obj = {"key": "value" }
+
 @app.get("/")
 async def root():
     return {
